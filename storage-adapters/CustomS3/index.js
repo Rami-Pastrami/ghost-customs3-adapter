@@ -69,12 +69,16 @@ class CustomS3Adapter extends StorageBase {
             this.endpoint = `https://s3.${this.region}.amazonaws.com`;
         }
 
+        // Detect if we're using MinIO or another non-AWS service
+        this.isMinIO = this.endpoint && !this.endpoint.includes('amazonaws.com');
+
         // Log configuration for debugging (without exposing secrets)
         console.log('S3 Adapter Configuration:');
         console.log(`  Bucket: ${this.bucket}`);
         console.log(`  Region: ${this.region}`);
         console.log(`  Endpoint: ${this.endpoint} ${process.env.S3_ENDPOINT ? '(explicit)' : '(auto-derived)'}`);
         console.log(`  Public URL: ${this.publicUrl}`);
+        console.log(`  Service Type: ${this.isMinIO ? 'MinIO/S3-Compatible' : 'AWS S3'}`);
         console.log(`  Access Key: ${this.accessKeyId ? `${this.accessKeyId.substring(0, 4)}...` : 'NOT SET'}`);
         console.log(`  Secret Key: ${this.secretAccessKey ? 'SET' : 'NOT SET'}`);
 
@@ -89,7 +93,7 @@ class CustomS3Adapter extends StorageBase {
                 S3_SECRET_KEY: ${this.secretAccessKey ? 'SET' : 'MISSING'}`);
         }
 
-        // Configure the AWS S3 client
+        // Configure the AWS S3 client with MinIO-specific settings
         const s3Config = {
             region: this.region,
             credentials: {
@@ -104,50 +108,96 @@ class CustomS3Adapter extends StorageBase {
             s3Config.endpoint = this.endpoint;
         }
 
+        // MinIO-specific configuration
+        if (this.isMinIO) {
+            s3Config.signatureVersion = 'v4';
+            s3Config.s3ForcePathStyle = true;
+        }
+
         console.log(`Creating S3 client with endpoint: ${this.endpoint}`);
         
         this.s3 = new S3Client(s3Config);
     }
 
     async save(image, targetDir) {
-        const filePath = this.getTargetDir(targetDir) + '/' + this.getUniqueFileName(image, targetDir);
-        const fileContent = readFileSync(image.path);
+        try {
+            const filePath = this.getTargetDir(targetDir) + '/' + this.getUniqueFileName(image, targetDir);
+            const fileContent = readFileSync(image.path);
 
-        const command = new PutObjectCommand({
-            Bucket: this.bucket,
-            Key: filePath,
-            Body: fileContent,
-            ContentType: image.type,
-            ACL: 'public-read'
-        });
+            console.log(`Uploading file: ${filePath} to bucket: ${this.bucket}`);
 
-        await this.s3.send(command);
-        return `${this.publicUrl}/${filePath}`;
+            const putCommand = {
+                Bucket: this.bucket,
+                Key: filePath,
+                Body: fileContent,
+                ContentType: image.type
+            };
+
+            // Only add ACL for AWS S3, not for MinIO
+            if (!this.isMinIO) {
+                putCommand.ACL = 'public-read';
+            }
+
+            const command = new PutObjectCommand(putCommand);
+            await this.s3.send(command);
+            
+            const resultUrl = `${this.publicUrl}/${filePath}`;
+            console.log(`Successfully uploaded file, accessible at: ${resultUrl}`);
+            return resultUrl;
+        } catch (error) {
+            console.error('Error uploading file to S3:', error);
+            console.error('Error details:', {
+                message: error.message,
+                code: error.Code,
+                statusCode: error.$metadata?.httpStatusCode,
+                requestId: error.$metadata?.requestId
+            });
+            throw error;
+        }
     }
 
     async exists(filename, targetDir) {
         const filePath = path.posix.join(targetDir || '', filename);
         try {
+            console.log(`Checking if file exists: ${filePath} in bucket: ${this.bucket}`);
             const command = new HeadObjectCommand({
                 Bucket: this.bucket,
                 Key: filePath
             });
             await this.s3.send(command);
+            console.log(`File exists: ${filePath}`);
             return true;
         } catch (err) {
-            if (err.name === 'NotFound') return false;
+            if (err.name === 'NotFound' || err.name === 'NoSuchKey' || err.$metadata?.httpStatusCode === 404) {
+                console.log(`File does not exist: ${filePath}`);
+                return false;
+            }
+            console.error('Error checking file existence:', err);
+            console.error('Error details:', {
+                message: err.message,
+                code: err.Code,
+                statusCode: err.$metadata?.httpStatusCode,
+                requestId: err.$metadata?.requestId
+            });
             throw err;
         }
     }
 
     async delete(filename, targetDir) {
-        const filePath = path.posix.join(targetDir || '', filename);
-        const command = new DeleteObjectCommand({
-            Bucket: this.bucket,
-            Key: filePath
-        });
-        await this.s3.send(command);
-        return true;
+        try {
+            const filePath = path.posix.join(targetDir || '', filename);
+            console.log(`Deleting file: ${filePath} from bucket: ${this.bucket}`);
+            const command = new DeleteObjectCommand({
+                Bucket: this.bucket,
+                Key: filePath
+            });
+            await this.s3.send(command);
+            console.log(`Successfully deleted file: ${filePath}`);
+            return true;
+        } catch (error) {
+            console.error('Error deleting file from S3:', error);
+            throw error;
+        }
     }
 
     serve() {
@@ -155,13 +205,19 @@ class CustomS3Adapter extends StorageBase {
     }
 
     async read(options) {
-        const command = new GetObjectCommand({
-            Bucket: this.bucket,
-            Key: options.path
-        });
+        try {
+            console.log(`Reading file: ${options.path} from bucket: ${this.bucket}`);
+            const command = new GetObjectCommand({
+                Bucket: this.bucket,
+                Key: options.path
+            });
 
-        const data = await this.s3.send(command);
-        return data.Body;
+            const data = await this.s3.send(command);
+            return data.Body;
+        } catch (error) {
+            console.error('Error reading file from S3:', error);
+            throw error;
+        }
     }
 }
 
