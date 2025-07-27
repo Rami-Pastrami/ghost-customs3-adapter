@@ -1,4 +1,4 @@
-const StorageBase = require('./lib/storage-base');
+const StorageBase = require('storage-base');
 const path = require('path');
 const { readFileSync } = require('fs');
 const {
