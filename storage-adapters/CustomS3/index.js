@@ -1,7 +1,13 @@
-const StorageBase = require('ghost-storage-base');
-const AWS = require('aws-sdk');
+const StorageBase = require('./lib/storage-base');
 const path = require('path');
 const { readFileSync } = require('fs');
+const {
+    S3Client,
+    PutObjectCommand,
+    DeleteObjectCommand,
+    GetObjectCommand,
+    HeadObjectCommand
+} = require('@aws-sdk/client-s3');
 
 class CustomS3Adapter extends StorageBase {
     constructor(config) {
@@ -12,13 +18,14 @@ class CustomS3Adapter extends StorageBase {
         this.endpoint = process.env.S3_ENDPOINT;
         this.publicUrl = process.env.S3_PUBLIC_URL;
 
-        this.s3 = new AWS.S3({
-            accessKeyId: process.env.S3_ACCESS_KEY,
-            secretAccessKey: process.env.S3_SECRET_KEY,
-            endpoint: this.endpoint,
-            s3ForcePathStyle: true,
-            signatureVersion: 'v4',
+        this.s3 = new S3Client({
             region: this.region,
+            endpoint: this.endpoint,
+            credentials: {
+                accessKeyId: process.env.S3_ACCESS_KEY,
+                secretAccessKey: process.env.S3_SECRET_KEY
+            },
+            forcePathStyle: true
         });
     }
 
@@ -26,39 +33,55 @@ class CustomS3Adapter extends StorageBase {
         const filePath = this.getTargetDir(targetDir) + '/' + this.getUniqueFileName(image, targetDir);
         const fileContent = readFileSync(image.path);
 
-        await this.s3.putObject({
+        const command = new PutObjectCommand({
             Bucket: this.bucket,
             Key: filePath,
             Body: fileContent,
             ContentType: image.type,
-            ACL: 'public-read',
-        }).promise();
+            ACL: 'public-read'
+        });
 
+        await this.s3.send(command);
         return `${this.publicUrl}/${filePath}`;
     }
 
-    exists(filename, targetDir) {
-        return Promise.resolve(false);
+    async exists(filename, targetDir) {
+        const filePath = path.posix.join(targetDir || '', filename);
+        try {
+            const command = new HeadObjectCommand({
+                Bucket: this.bucket,
+                Key: filePath
+            });
+            await this.s3.send(command);
+            return true;
+        } catch (err) {
+            if (err.name === 'NotFound') return false;
+            throw err;
+        }
     }
 
-    delete(filename, targetDir) {
-        const filePath = path.join(targetDir || '', filename);
-
-        return this.s3.deleteObject({
+    async delete(filename, targetDir) {
+        const filePath = path.posix.join(targetDir || '', filename);
+        const command = new DeleteObjectCommand({
             Bucket: this.bucket,
-            Key: filePath,
-        }).promise();
+            Key: filePath
+        });
+        await this.s3.send(command);
+        return true;
     }
 
     serve() {
         return (req, res, next) => next();
     }
 
-    read(options) {
-        return this.s3.getObject({
+    async read(options) {
+        const command = new GetObjectCommand({
             Bucket: this.bucket,
-            Key: options.path,
-        }).promise().then(data => data.Body);
+            Key: options.path
+        });
+
+        const data = await this.s3.send(command);
+        return data.Body;
     }
 }
 
