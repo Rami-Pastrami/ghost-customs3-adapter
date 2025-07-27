@@ -1,4 +1,5 @@
 .git
+.gitea
 node_modules
 *.log
 Dockerfile
