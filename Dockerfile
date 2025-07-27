@@ -6,6 +6,9 @@ RUN mkdir -p /var/lib/ghost/content/adapters/storage/CustomS3
 COPY storage-adapters/CustomS3/index.js /var/lib/ghost/content/adapters/storage/CustomS3/index.js
 COPY storage-adapters/CustomS3/package.json /var/lib/ghost/content/adapters/storage/CustomS3/package.json
 
+# Create symlink Ghost expects
+RUN ln -s . /var/lib/ghost/content/adapters/storage/CustomS3/current
+
 # Install AWS SDK
 WORKDIR /var/lib/ghost/content/adapters/storage/CustomS3
 RUN npm install --production
