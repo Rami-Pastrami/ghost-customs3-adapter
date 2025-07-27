@@ -1,13 +1,7 @@
 const StorageBase = require('ghost-storage-base');
 const path = require('path');
 const { readFileSync } = require('fs');
-const {
-    S3Client,
-    PutObjectCommand,
-    DeleteObjectCommand,
-    GetObjectCommand,
-    HeadObjectCommand
-} = require('@aws-sdk/client-s3');
+const Minio = require('minio');
 
 class CustomS3Adapter extends StorageBase {
     constructor(config = {}) {
@@ -23,7 +17,7 @@ class CustomS3Adapter extends StorageBase {
         // S3_REGION: AWS region code (string)
         // Examples: "us-east-1", "eu-west-1", "ap-southeast-1"
         // Note: For non-AWS services like MinIO, any valid region works
-        this.region = process.env.S3_REGION;
+        this.region = process.env.S3_REGION || 'us-east-1';
         
         // S3_PUBLIC_URL: Full public URL that browsers will use to access images (string with protocol)
         // Examples: 
@@ -66,57 +60,64 @@ class CustomS3Adapter extends StorageBase {
             }
         } else {
             // Default to AWS S3 endpoint if no explicit endpoint and no public URL to derive from
-            this.endpoint = `https://s3.${this.region}.amazonaws.com`;
+            this.endpoint = `s3.${this.region}.amazonaws.com`;
+        }
+
+        // Parse endpoint for MinIO client
+        let endpointHost, port, useSSL;
+        if (this.endpoint) {
+            try {
+                const url = new URL(this.endpoint);
+                endpointHost = url.hostname;
+                port = url.port ? parseInt(url.port) : (url.protocol === 'https:' ? 443 : 80);
+                useSSL = url.protocol === 'https:';
+            } catch (error) {
+                throw new Error(`Invalid endpoint format: ${this.endpoint}`);
+            }
+        } else {
+            // AWS defaults
+            endpointHost = `s3.${this.region}.amazonaws.com`;
+            port = 443;
+            useSSL = true;
         }
 
         // Detect if we're using MinIO or another non-AWS service
-        this.isMinIO = this.endpoint && !this.endpoint.includes('amazonaws.com');
+        this.isAWS = endpointHost.includes('amazonaws.com');
 
         // Log configuration for debugging (without exposing secrets)
-        console.log('S3 Adapter Configuration:');
+        console.log('S3 Adapter Configuration (MinIO SDK):');
         console.log(`  Bucket: ${this.bucket}`);
         console.log(`  Region: ${this.region}`);
-        console.log(`  Endpoint: ${this.endpoint} ${process.env.S3_ENDPOINT ? '(explicit)' : '(auto-derived)'}`);
+        console.log(`  Endpoint Host: ${endpointHost}`);
+        console.log(`  Port: ${port}`);
+        console.log(`  Use SSL: ${useSSL}`);
         console.log(`  Public URL: ${this.publicUrl}`);
-        console.log(`  Service Type: ${this.isMinIO ? 'MinIO/S3-Compatible' : 'AWS S3'}`);
+        console.log(`  Service Type: ${this.isAWS ? 'AWS S3' : 'MinIO/S3-Compatible'}`);
         console.log(`  Access Key: ${this.accessKeyId ? `${this.accessKeyId.substring(0, 4)}...` : 'NOT SET'}`);
         console.log(`  Secret Key: ${this.secretAccessKey ? 'SET' : 'NOT SET'}`);
 
         // Validate that all required configuration is present
-        if (!this.bucket || !this.region || !this.publicUrl || !this.accessKeyId || !this.secretAccessKey) {
+        if (!this.bucket || !this.accessKeyId || !this.secretAccessKey || !this.publicUrl) {
             throw new Error(`Missing required S3 configuration. Please check your environment variables:
                 S3_BUCKET: ${this.bucket ? 'SET' : 'MISSING'}
-                S3_REGION: ${this.region ? 'SET' : 'MISSING'}
+                S3_REGION: ${this.region}
                 S3_ENDPOINT: ${this.endpoint} (${process.env.S3_ENDPOINT ? 'explicit' : 'auto-derived from S3_PUBLIC_URL'})
                 S3_PUBLIC_URL: ${this.publicUrl ? 'SET' : 'MISSING'}
                 S3_ACCESS_KEY: ${this.accessKeyId ? 'SET' : 'MISSING'}
                 S3_SECRET_KEY: ${this.secretAccessKey ? 'SET' : 'MISSING'}`);
         }
 
-        // Configure the AWS S3 client with MinIO-specific settings
-        const s3Config = {
-            region: this.region,
-            credentials: {
-                accessKeyId: this.accessKeyId,
-                secretAccessKey: this.secretAccessKey
-            },
-            forcePathStyle: true, // Required for MinIO and some S3-compatible services
-        };
+        // Create MinIO client - much more reliable than AWS SDK for MinIO
+        this.minioClient = new Minio.Client({
+            endPoint: endpointHost,
+            port: port,
+            useSSL: useSSL,
+            accessKey: this.accessKeyId,
+            secretKey: this.secretAccessKey,
+            region: this.region
+        });
 
-        // Set endpoint for non-AWS services (AWS uses default endpoints)
-        if (this.endpoint) {
-            s3Config.endpoint = this.endpoint;
-        }
-
-        // MinIO-specific configuration
-        if (this.isMinIO) {
-            s3Config.signatureVersion = 'v4';
-            s3Config.s3ForcePathStyle = true;
-        }
-
-        console.log(`Creating S3 client with endpoint: ${this.endpoint}`);
-        
-        this.s3 = new S3Client(s3Config);
+        console.log(`Created MinIO client for ${endpointHost}:${port} (SSL: ${useSSL})`);
     }
 
     async save(image, targetDir) {
@@ -126,20 +127,19 @@ class CustomS3Adapter extends StorageBase {
 
             console.log(`Uploading file: ${filePath} to bucket: ${this.bucket}`);
 
-            const putCommand = {
-                Bucket: this.bucket,
-                Key: filePath,
-                Body: fileContent,
-                ContentType: image.type
+            // MinIO SDK handles metadata much better than AWS SDK
+            const metaData = {
+                'Content-Type': image.type
             };
 
-            // Only add ACL for AWS S3, not for MinIO
-            if (!this.isMinIO) {
-                putCommand.ACL = 'public-read';
-            }
-
-            const command = new PutObjectCommand(putCommand);
-            await this.s3.send(command);
+            // Upload using MinIO SDK
+            await this.minioClient.putObject(
+                this.bucket,
+                filePath,
+                fileContent,
+                fileContent.length,
+                metaData
+            );
             
             const resultUrl = `${this.publicUrl}/${filePath}`;
             console.log(`Successfully uploaded file, accessible at: ${resultUrl}`);
@@ -148,10 +148,22 @@ class CustomS3Adapter extends StorageBase {
             console.error('Error uploading file to S3:', error);
             console.error('Error details:', {
                 message: error.message,
-                code: error.Code,
-                statusCode: error.$metadata?.httpStatusCode,
-                requestId: error.$metadata?.requestId
+                code: error.code,
+                statusCode: error.statusCode
             });
+            
+            // Provide helpful debugging info
+            if (error.code === 'InvalidAccessKeyId' || error.code === 'SignatureDoesNotMatch') {
+                console.error('CREDENTIALS ERROR:');
+                console.error('- Check your S3_ACCESS_KEY and S3_SECRET_KEY are correct');
+                console.error('- Ensure no extra spaces or special characters in credentials');
+                console.error('- Verify MinIO server is accessible and credentials are valid');
+            } else if (error.code === 'NoSuchBucket') {
+                console.error('BUCKET ERROR:');
+                console.error(`- Bucket "${this.bucket}" does not exist`);
+                console.error('- Create the bucket in MinIO first');
+            }
+            
             throw error;
         }
     }
@@ -160,25 +172,17 @@ class CustomS3Adapter extends StorageBase {
         const filePath = path.posix.join(targetDir || '', filename);
         try {
             console.log(`Checking if file exists: ${filePath} in bucket: ${this.bucket}`);
-            const command = new HeadObjectCommand({
-                Bucket: this.bucket,
-                Key: filePath
-            });
-            await this.s3.send(command);
+            
+            // MinIO SDK's statObject is more reliable than AWS SDK's headObject
+            await this.minioClient.statObject(this.bucket, filePath);
             console.log(`File exists: ${filePath}`);
             return true;
         } catch (err) {
-            if (err.name === 'NotFound' || err.name === 'NoSuchKey' || err.$metadata?.httpStatusCode === 404) {
+            if (err.code === 'NotFound' || err.code === 'NoSuchKey') {
                 console.log(`File does not exist: ${filePath}`);
                 return false;
             }
             console.error('Error checking file existence:', err);
-            console.error('Error details:', {
-                message: err.message,
-                code: err.Code,
-                statusCode: err.$metadata?.httpStatusCode,
-                requestId: err.$metadata?.requestId
-            });
             throw err;
         }
     }
@@ -187,11 +191,8 @@ class CustomS3Adapter extends StorageBase {
         try {
             const filePath = path.posix.join(targetDir || '', filename);
             console.log(`Deleting file: ${filePath} from bucket: ${this.bucket}`);
-            const command = new DeleteObjectCommand({
-                Bucket: this.bucket,
-                Key: filePath
-            });
-            await this.s3.send(command);
+            
+            await this.minioClient.removeObject(this.bucket, filePath);
             console.log(`Successfully deleted file: ${filePath}`);
             return true;
         } catch (error) {
@@ -207,13 +208,10 @@ class CustomS3Adapter extends StorageBase {
     async read(options) {
         try {
             console.log(`Reading file: ${options.path} from bucket: ${this.bucket}`);
-            const command = new GetObjectCommand({
-                Bucket: this.bucket,
-                Key: options.path
-            });
-
-            const data = await this.s3.send(command);
-            return data.Body;
+            
+            // MinIO SDK's getObject returns a readable stream
+            const stream = await this.minioClient.getObject(this.bucket, options.path);
+            return stream;
         } catch (error) {
             console.error('Error reading file from S3:', error);
             throw error;

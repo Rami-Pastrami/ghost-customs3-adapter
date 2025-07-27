@@ -2,7 +2,7 @@
   "name": "ghost-custom-s3-adapter",
   "version": "1.0.0",
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.540.0",
+    "minio": "^8.0.0",
     "ghost-storage-base": "^0.0.3"
   }
 }
