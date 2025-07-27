@@ -2,13 +2,11 @@
 FROM ghost:5-alpine
 
 # Copy storage adapter into the Ghost content directory
-RUN mkdir -p /var/lib/ghost/content/adapters/storage/CustomS3
-COPY storage-adapters/CustomS3/index.js /var/lib/ghost/content/adapters/storage/CustomS3/index.js
-COPY storage-adapters/CustomS3/package.json /var/lib/ghost/content/adapters/storage/CustomS3/package.json
+COPY storage-adapters/CustomS3/ /var/lib/ghost/content/adapters/storage/CustomS3/
 
-# Create symlink Ghost expects
-RUN ln -s . /var/lib/ghost/content/adapters/storage/CustomS3/current
-
-# Install AWS SDK
+# Install adapter dependencies
 WORKDIR /var/lib/ghost/content/adapters/storage/CustomS3
 RUN npm install --production
+
+# Return to Ghost working directory
+WORKDIR /var/lib/ghost
