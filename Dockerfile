@@ -6,5 +6,5 @@ RUN mkdir -p /var/lib/ghost/content/adapters/storage
 COPY ./storage-adapters/CustomS3 /var/lib/ghost/content/adapters/storage/CustomS3
 
 # Install AWS SDK
-WORKDIR /var/lib/ghost/content/adapters/storage/minio
-RUN npm install aws-sdk
+WORKDIR /var/lib/ghost/content/adapters/storage/CustomS3
+RUN npm install --production
