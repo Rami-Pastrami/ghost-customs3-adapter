@@ -1,4 +1,4 @@
-const StorageBase = require('storage-base');
+const StorageBase = require('ghost-storage-base');
 const path = require('path');
 const { readFileSync } = require('fs');
 const {
