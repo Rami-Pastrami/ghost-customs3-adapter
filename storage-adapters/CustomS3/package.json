@@ -2,6 +2,6 @@
   "name": "ghost-custom-s3-adapter",
   "version": "1.0.0",
   "dependencies": {
-    "aws-sdk": "^2.1350.0",
+    "aws-sdk": "^2.1350.0"
   }
 }
