@@ -2,6 +2,7 @@
 FROM ghost:5-alpine
 
 # Copy storage adapter into the Ghost content directory
+RUN mkdir -p /var/lib/ghost/content/adapters/storage
 COPY ./storage-adapters/CustomS3 /var/lib/ghost/content/adapters/storage/CustomS3
 
 # Install AWS SDK
