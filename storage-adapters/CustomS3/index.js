@@ -1,4 +1,4 @@
-const { StorageBase } = require('ghost-storage-base');
+const StorageBase = require('ghost-storage-base');
 const AWS = require('aws-sdk');
 const path = require('path');
 const { readFileSync } = require('fs');
