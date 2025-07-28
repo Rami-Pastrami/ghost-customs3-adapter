@@ -1,6 +1,6 @@
 const StorageBase = require('ghost-storage-base');
 const path = require('path');
-const { readFileSync } = require('fs');
+const { readFile } = require('fs').promises;
 const Minio = require('minio');
 
 class CustomS3Adapter extends StorageBase {
@@ -90,12 +90,15 @@ class CustomS3Adapter extends StorageBase {
 
     async save(uploadingFile, targetDir) {
         try {
-            const filePath = this.getTargetDir(targetDir) + '/' + this.getUniqueFileName(uploadingFile, targetDir);
-            const fileContent = readFileSync(uploadingFile.path);
-
+            
+			const directory = targetDir || this.getTargetDir(this.pathPrefix)
+			const filePath = this.getTargetDir(targetDir) + '/' + this.getUniqueFileName(uploadingFile, directory);
+            
+            const fileContent = await readFile(uploadingFile.path);
 
             const metaData = {
-                'Content-Type': uploadingFile.type
+                'Content-Type': uploadingFile.type,
+				'Cache-Control': `max-age=${60 * 60 * 24 * 7}`, // 7 days
             };
 
             // Upload using MinIO SDK
@@ -128,6 +131,10 @@ class CustomS3Adapter extends StorageBase {
                 console.error('BUCKET ERROR:');
                 console.error(`- Bucket "${this.bucket}" does not exist`);
                 console.error('- Create the bucket in MinIO first');
+            } else if (error.code === 'ENOENT') {
+                console.error('FILE ERROR:');
+                console.error(`- Temporary file not found: ${uploadingFile.path}`);
+                console.error('- Ghost may have cleaned up the temp file too early');
             }
             
             throw error;
@@ -137,18 +144,13 @@ class CustomS3Adapter extends StorageBase {
     async exists(filename, targetDir) {
         const filePath = path.posix.join(targetDir || '', filename);
         try {
-            console.log(`Checking if file exists: ${filePath} in bucket: ${this.bucket}`);
             
-            // MinIO SDK's statObject is more reliable than AWS SDK's headObject
             await this.minioClient.statObject(this.bucket, filePath);
-            console.log(`File exists: ${filePath}`);
             return true;
         } catch (err) {
             if (err.code === 'NotFound' || err.code === 'NoSuchKey') {
-                console.log(`File does not exist: ${filePath}`);
                 return false;
             }
-            console.error('Error checking file existence:', err);
             throw err;
         }
     }
@@ -156,7 +158,6 @@ class CustomS3Adapter extends StorageBase {
     async delete(filename, targetDir) {
         try {
             const filePath = path.posix.join(targetDir || '', filename);
-            console.log(`Deleting file: ${filePath} from bucket: ${this.bucket}`);
             
             await this.minioClient.removeObject(this.bucket, filePath);
             console.log(`Successfully deleted file: ${filePath}`);
