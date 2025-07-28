@@ -7,6 +7,10 @@ class CustomS3Adapter extends StorageBase {
     constructor(config = {}) {
         super(config);
 
+        // Add missing base class properties that LocalStorageBase uses
+        this.storagePath = 'content/images'; // Base path for organizing files
+        this.staticFileURLPrefix = 'content/images'; // URL prefix for accessing files
+
         // Read configuration from environment variables
         // Expected formats and examples:
         
@@ -88,39 +92,55 @@ class CustomS3Adapter extends StorageBase {
         });
     }
 
-    async save(uploadingFile, targetDir) {
+    async save(file, targetDir) {
+        console.log('=== SAVE METHOD DEBUG (LocalStorageBase pattern) ===');
+        console.log('file:', {
+            name: file.name,
+            path: file.path,
+            type: file.type,
+            size: file.size
+        });
+        console.log('targetDir:', targetDir);
+
         try {
-            // Get target directory from base class (handles date-based folders like "2025/01")
-            //const targetDirPath = await Promise.resolve(this.getTargetDir(targetDir));
+            // Follow LocalStorageBase pattern exactly
+            // NOTE: the base implementation of `getTargetDir` returns the format this.storagePath/YYYY/MM
+            targetDir = targetDir || this.getTargetDir(this.storagePath);
+            console.log('resolved targetDir:', targetDir, typeof targetDir);
 
-            // Get unique filename from base class (prevents collisions)
-            //const uniqueFileName = await Promise.resolve(this.getUniqueFileName(uploadingFile, targetDir));
+            // getUniqueFileName is definitely async according to LocalStorageBase
+            const filename = await this.getUniqueFileName(file, targetDir);
+            console.log('filename from getUniqueFileName:', filename, typeof filename);
 
-            // Build the full file path for storage
-			
-            const filePath = "/2025/08/[object%20Promise]"; //`${targetDirPath}/${uniqueFileName}`;
+            // Build the full path for S3 storage
+            const filePath = `${targetDir}/${path.basename(filename)}`;
+            console.log('Final filePath for S3:', filePath);
 
             // Read file content asynchronously
-            const fileContent = await readFile(uploadingFile.path);
+            const fileContent = await readFile(file.path);
+            console.log(`File size: ${fileContent.length} bytes`);
 
             // Metadata for the file
             const metaData = {
-                'Content-Type': uploadingFile.type,
+                'Content-Type': file.type,
                 'Cache-Control': `max-age=${60 * 60 * 24 * 7}`, // 7 days
             };
+
+            console.log(`Uploading to MinIO: ${filePath}`);
 
             // Upload using MinIO SDK
             await this.minioClient.putObject(
                 this.bucket,
-                filePath,  // Use the same path for both upload and URL
+                filePath,
                 fileContent,
                 fileContent.length,
                 metaData
             );
             
-            // Build the public URL
-            const resultUrl = `${this.publicUrl}/${filePath}`;
-            return resultUrl;
+            // Build the public URL - similar to LocalStorageBase fullUrl construction
+            const fullUrl = `${this.publicUrl}/${filePath}`;
+            console.log(`Successfully uploaded file, accessible at: ${fullUrl}`);
+            return fullUrl;
 
         } catch (error) {
             console.error('Error uploading file to S3:', error);
@@ -143,7 +163,7 @@ class CustomS3Adapter extends StorageBase {
                 console.error('- Create the bucket in MinIO first');
             } else if (error.code === 'ENOENT') {
                 console.error('FILE ERROR:');
-                console.error(`- Temporary file not found: ${uploadingFile.path}`);
+                console.error(`- Temporary file not found: ${file.path}`);
                 console.error('- Ghost may have cleaned up the temp file too early');
             } else if (error.message && error.message.includes('path')) {
                 console.error('PATH ERROR:');
