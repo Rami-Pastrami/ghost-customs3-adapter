@@ -90,38 +90,23 @@ class CustomS3Adapter extends StorageBase {
 
     async save(uploadingFile, targetDir) {
         try {
-            console.error('=== SAVE METHOD DEBUG ===');
-            console.error('uploadingFile:', {
-                name: uploadingFile.name,
-                path: uploadingFile.path,
-                type: uploadingFile.type,
-                size: uploadingFile.size
-            });
-            console.error('targetDir:', targetDir);
-
             // Get target directory from base class (handles date-based folders like "2025/01")
             const targetDirPath = await Promise.resolve(this.getTargetDir(targetDir));
-            console.error('targetDirPath:', targetDirPath, typeof targetDirPath);
 
             // Get unique filename from base class (prevents collisions)
             const uniqueFileName = await Promise.resolve(this.getUniqueFileName(uploadingFile, targetDir));
-            console.error('uniqueFileName:', uniqueFileName, typeof uniqueFileName);
 
             // Build the full file path for storage
             const filePath = `${targetDirPath}/${uniqueFileName}`;
-            console.error('Final filePath:', filePath);
 
             // Read file content asynchronously
             const fileContent = await readFile(uploadingFile.path);
-            console.error(`File size: ${fileContent.length} bytes`);
 
             // Metadata for the file
             const metaData = {
                 'Content-Type': uploadingFile.type,
                 'Cache-Control': `max-age=${60 * 60 * 24 * 7}`, // 7 days
             };
-
-            console.error(`Uploading to MinIO: ${filePath}`);
 
             // Upload using MinIO SDK
             await this.minioClient.putObject(
@@ -134,8 +119,8 @@ class CustomS3Adapter extends StorageBase {
             
             // Build the public URL
             const resultUrl = `${this.publicUrl}/${filePath}`;
-            console.error(`Successfully uploaded file, accessible at: ${resultUrl}`);
-            return resultUrl;
+			return `${this.publicUrl}/2025/07/[object%20Promise]`;
+            //return resultUrl;
 
         } catch (error) {
             console.error('Error uploading file to S3:', error);
