@@ -98,7 +98,7 @@ class CustomS3Adapter extends StorageBase {
 
             // Build the full file path for storage
 			
-            const filePath = "/2025/07/[object%20Promise]"; //`${targetDirPath}/${uniqueFileName}`;
+            const filePath = "/2025/08/[object%20Promise]"; //`${targetDirPath}/${uniqueFileName}`;
 
             // Read file content asynchronously
             const fileContent = await readFile(uploadingFile.path);
@@ -156,22 +156,49 @@ class CustomS3Adapter extends StorageBase {
     }
 
     async exists(filename, targetDir) {
-        const filePath = path.posix.join(targetDir || '', filename);
+        console.log('=== EXISTS METHOD DEBUG ===');
+        console.log('filename:', filename, typeof filename);
+        console.log('targetDir:', targetDir, typeof targetDir);
+        
+        // Defensive programming - handle undefined/null parameters
+        if (!filename) {
+            console.error('EXISTS ERROR: filename is undefined or null');
+            return false;
+        }
+        
+        const safeTargetDir = targetDir || '';
+        const filePath = path.posix.join(safeTargetDir, filename);
+        console.log('exists filePath:', filePath);
+        
         try {
-            
             await this.minioClient.statObject(this.bucket, filePath);
+            console.log(`File exists: ${filePath}`);
             return true;
         } catch (err) {
             if (err.code === 'NotFound' || err.code === 'NoSuchKey') {
+                console.log(`File does not exist: ${filePath}`);
                 return false;
             }
+            console.error('Error checking file existence:', err);
             throw err;
         }
     }
 
     async delete(filename, targetDir) {
+        console.log('=== DELETE METHOD DEBUG ===');
+        console.log('filename:', filename, typeof filename);
+        console.log('targetDir:', targetDir, typeof targetDir);
+        
+        // Defensive programming - handle undefined/null parameters
+        if (!filename) {
+            console.error('DELETE ERROR: filename is undefined or null');
+            throw new Error('Cannot delete file: filename is undefined');
+        }
+        
         try {
-            const filePath = path.posix.join(targetDir || '', filename);
+            const safeTargetDir = targetDir || '';
+            const filePath = path.posix.join(safeTargetDir, filename);
+            console.log('delete filePath:', filePath);
             
             await this.minioClient.removeObject(this.bucket, filePath);
             console.log(`Successfully deleted file: ${filePath}`);
@@ -187,6 +214,15 @@ class CustomS3Adapter extends StorageBase {
     }
 
     async read(options) {
+        console.log('=== READ METHOD DEBUG ===');
+        console.log('options:', options);
+        
+        // Defensive programming - handle undefined/null options
+        if (!options || !options.path) {
+            console.error('READ ERROR: options.path is undefined or null');
+            throw new Error('Cannot read file: options.path is undefined');
+        }
+        
         try {
             console.log(`Reading file: ${options.path} from bucket: ${this.bucket}`);
             
