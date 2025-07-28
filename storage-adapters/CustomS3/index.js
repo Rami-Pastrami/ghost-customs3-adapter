@@ -122,10 +122,39 @@ class CustomS3Adapter extends StorageBase {
 
     async save(image, targetDir) {
         try {
-            const filePath = this.getTargetDir(targetDir) + '/' + this.getUniqueFileName(image, targetDir);
-            const fileContent = readFileSync(image.path);
+            // Debug the image object to see what we're working with
+            console.log('Image object:', {
+                name: image.name,
+                path: image.path,
+                type: image.type,
+                size: image.size
+            });
+            console.log('Target directory:', targetDir);
 
+            // Get target directory and unique filename from base class
+            const targetDirPath = this.getTargetDir(targetDir);
+            const uniqueFileName = this.getUniqueFileName(image, targetDir);
+            
+            console.log('Target dir path:', targetDirPath);
+            console.log('Unique filename:', uniqueFileName);
+            console.log('Target dir type:', typeof targetDirPath);
+            console.log('Unique filename type:', typeof uniqueFileName);
+
+            // Handle potential promise returns from base class methods
+            const resolvedTargetDir = await Promise.resolve(targetDirPath);
+            const resolvedFileName = await Promise.resolve(uniqueFileName);
+            
+            console.log('Resolved target dir:', resolvedTargetDir);
+            console.log('Resolved filename:', resolvedFileName);
+
+            // Build the full file path
+            const filePath = `${resolvedTargetDir}/${resolvedFileName}`;
+            console.log('Final file path:', filePath);
+
+            // Read the file content
+            const fileContent = readFileSync(image.path);
             console.log(`Uploading file: ${filePath} to bucket: ${this.bucket}`);
+            console.log(`File size: ${fileContent.length} bytes`);
 
             // MinIO SDK handles metadata much better than AWS SDK
             const metaData = {
@@ -133,13 +162,15 @@ class CustomS3Adapter extends StorageBase {
             };
 
             // Upload using MinIO SDK
-            await this.minioClient.putObject(
+            const uploadResult = await this.minioClient.putObject(
                 this.bucket,
                 filePath,
                 fileContent,
                 fileContent.length,
                 metaData
             );
+            
+            console.log('MinIO upload result:', uploadResult);
             
             const resultUrl = `${this.publicUrl}/${filePath}`;
             console.log(`Successfully uploaded file, accessible at: ${resultUrl}`);
@@ -149,7 +180,8 @@ class CustomS3Adapter extends StorageBase {
             console.error('Error details:', {
                 message: error.message,
                 code: error.code,
-                statusCode: error.statusCode
+                statusCode: error.statusCode,
+                stack: error.stack
             });
             
             // Provide helpful debugging info
