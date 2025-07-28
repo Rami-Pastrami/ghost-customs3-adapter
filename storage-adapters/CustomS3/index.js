@@ -90,35 +90,60 @@ class CustomS3Adapter extends StorageBase {
 
     async save(uploadingFile, targetDir) {
         try {
-            
-			const directory = targetDir || this.getTargetDir(this.pathPrefix)
-			const filePath = this.getTargetDir(targetDir) + '/' + uploadingFile.name;  // this.getUniqueSecureFilePath(uploadingFile, directory);
-            
-            const fileContent = await readFile(uploadingFile.path);
+            console.log('=== SAVE METHOD DEBUG ===');
+            console.log('uploadingFile:', {
+                name: uploadingFile.name,
+                path: uploadingFile.path,
+                type: uploadingFile.type,
+                size: uploadingFile.size
+            });
+            console.log('targetDir:', targetDir);
 
+            // Get target directory from base class (handles date-based folders like "2025/01")
+            const targetDirPath = await Promise.resolve(this.getTargetDir(targetDir));
+            console.log('targetDirPath:', targetDirPath, typeof targetDirPath);
+
+            // Get unique filename from base class (prevents collisions)
+            const uniqueFileName = await Promise.resolve(this.getUniqueFileName(uploadingFile, targetDir));
+            console.log('uniqueFileName:', uniqueFileName, typeof uniqueFileName);
+
+            // Build the full file path for storage
+            const filePath = `${targetDirPath}/${uniqueFileName}`;
+            console.log('Final filePath:', filePath);
+
+            // Read file content asynchronously
+            const fileContent = await readFile(uploadingFile.path);
+            console.log(`File size: ${fileContent.length} bytes`);
+
+            // Metadata for the file
             const metaData = {
                 'Content-Type': uploadingFile.type,
-				'Cache-Control': `max-age=${60 * 60 * 24 * 7}`, // 7 days
+                'Cache-Control': `max-age=${60 * 60 * 24 * 7}`, // 7 days
             };
+
+            console.log(`Uploading to MinIO: ${filePath}`);
 
             // Upload using MinIO SDK
             await this.minioClient.putObject(
                 this.bucket,
-                this.getUniqueSecureFilePath(uploadingFile, directory), //filePath,
+                filePath,  // Use the same path for both upload and URL
                 fileContent,
                 fileContent.length,
                 metaData
             );
             
+            // Build the public URL
             const resultUrl = `${this.publicUrl}/${filePath}`;
             console.log(`Successfully uploaded file, accessible at: ${resultUrl}`);
             return resultUrl;
+
         } catch (error) {
             console.error('Error uploading file to S3:', error);
             console.error('Error details:', {
                 message: error.message,
                 code: error.code,
-                statusCode: error.statusCode
+                statusCode: error.statusCode,
+                stack: error.stack
             });
             
             // Provide helpful debugging info
@@ -135,6 +160,10 @@ class CustomS3Adapter extends StorageBase {
                 console.error('FILE ERROR:');
                 console.error(`- Temporary file not found: ${uploadingFile.path}`);
                 console.error('- Ghost may have cleaned up the temp file too early');
+            } else if (error.message && error.message.includes('path')) {
+                console.error('PATH ERROR:');
+                console.error('- Issue with path generation in base class');
+                console.error('- Check Ghost storage base implementation');
             }
             
             throw error;
