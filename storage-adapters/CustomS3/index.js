@@ -92,7 +92,7 @@ class CustomS3Adapter extends StorageBase {
         try {
             
 			const directory = targetDir || this.getTargetDir(this.pathPrefix)
-			const filePath = this.getTargetDir(targetDir) + '/' + this.getUniqueSecureFilePath(uploadingFile, directory);
+			const filePath = this.getTargetDir(targetDir) + '/' + uploadingFile.name;  // this.getUniqueSecureFilePath(uploadingFile, directory);
             
             const fileContent = await readFile(uploadingFile.path);
 
