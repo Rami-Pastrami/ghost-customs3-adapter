@@ -38,30 +38,12 @@ class CustomS3Adapter extends StorageBase {
         //   MinIO default: "minioadmin"
         this.secretAccessKey = process.env.S3_SECRET_KEY;
 
-        // Smart endpoint detection for S3 API calls
-        // Priority: S3_ENDPOINT (explicit) > auto-derive from S3_PUBLIC_URL > default to AWS
-        if (process.env.S3_ENDPOINT) {
-            // S3_ENDPOINT: Full endpoint URL for S3 API calls (string with protocol)
-            // Examples:
-            //   AWS: Not needed (will auto-default)
-            //   MinIO: "http://localhost:9000" or "https://minio.example.com"
-            //   DigitalOcean: "https://nyc3.digitaloceanspaces.com"
-            this.endpoint = process.env.S3_ENDPOINT;
-        } else if (this.publicUrl) {
-            // Auto-derive endpoint from S3_PUBLIC_URL
-            // Extracts protocol and host from public URL
-            // Example: "http://localhost:9000/bucket" -> "http://localhost:9000"
-            try {
-                const url = new URL(this.publicUrl);
-                this.endpoint = `${url.protocol}//${url.host}`;
-                console.log(`Auto-derived S3_ENDPOINT from S3_PUBLIC_URL: ${this.endpoint}`);
-            } catch (error) {
-                throw new Error(`Invalid S3_PUBLIC_URL format: ${this.publicUrl}. Expected format: http://host:port/bucket-name`);
-            }
-        } else {
-            // Default to AWS S3 endpoint if no explicit endpoint and no public URL to derive from
-            this.endpoint = `s3.${this.region}.amazonaws.com`;
-        }
+		// S3_ENDPOINT: Full endpoint URL for S3 API calls (string with protocol)
+		// Examples:
+		//   AWS: 
+		//   MinIO: "http://localhost:9000" or "https://minio.example.com"
+		//   DigitalOcean: "https://nyc3.digitaloceanspaces.com"
+		this.endpoint = process.env.S3_ENDPOINT;
 
         // Parse endpoint for MinIO client
         let endpointHost, port, useSSL;
@@ -84,30 +66,18 @@ class CustomS3Adapter extends StorageBase {
         // Detect if we're using MinIO or another non-AWS service
         this.isAWS = endpointHost.includes('amazonaws.com');
 
-        // Log configuration for debugging (without exposing secrets)
-        console.log('S3 Adapter Configuration (MinIO SDK):');
-        console.log(`  Bucket: ${this.bucket}`);
-        console.log(`  Region: ${this.region}`);
-        console.log(`  Endpoint Host: ${endpointHost}`);
-        console.log(`  Port: ${port}`);
-        console.log(`  Use SSL: ${useSSL}`);
-        console.log(`  Public URL: ${this.publicUrl}`);
-        console.log(`  Service Type: ${this.isAWS ? 'AWS S3' : 'MinIO/S3-Compatible'}`);
-        console.log(`  Access Key: ${this.accessKeyId ? `${this.accessKeyId.substring(0, 4)}...` : 'NOT SET'}`);
-        console.log(`  Secret Key: ${this.secretAccessKey ? 'SET' : 'NOT SET'}`);
-
         // Validate that all required configuration is present
-        if (!this.bucket || !this.accessKeyId || !this.secretAccessKey || !this.publicUrl) {
+        if (!this.bucket || !this.accessKeyId || !this.secretAccessKey || !this.publicUrl || !this.endpoint) {
             throw new Error(`Missing required S3 configuration. Please check your environment variables:
                 S3_BUCKET: ${this.bucket ? 'SET' : 'MISSING'}
                 S3_REGION: ${this.region}
                 S3_ENDPOINT: ${this.endpoint} (${process.env.S3_ENDPOINT ? 'explicit' : 'auto-derived from S3_PUBLIC_URL'})
                 S3_PUBLIC_URL: ${this.publicUrl ? 'SET' : 'MISSING'}
                 S3_ACCESS_KEY: ${this.accessKeyId ? 'SET' : 'MISSING'}
+				S3_ENDPOINT: ${this.endpoint ? 'SET' : 'MISSING'}
                 S3_SECRET_KEY: ${this.secretAccessKey ? 'SET' : 'MISSING'}`);
         }
 
-        // Create MinIO client - much more reliable than AWS SDK for MinIO
         this.minioClient = new Minio.Client({
             endPoint: endpointHost,
             port: port,
@@ -116,61 +86,26 @@ class CustomS3Adapter extends StorageBase {
             secretKey: this.secretAccessKey,
             region: this.region
         });
-
-        console.log(`Created MinIO client for ${endpointHost}:${port} (SSL: ${useSSL})`);
     }
 
-    async save(image, targetDir) {
+    async save(uploadingFile, targetDir) {
         try {
-            // Debug the image object to see what we're working with
-            console.log('Image object:', {
-                name: image.name,
-                path: image.path,
-                type: image.type,
-                size: image.size
-            });
-            console.log('Target directory:', targetDir);
+            const filePath = this.getTargetDir(targetDir) + '/' + this.getUniqueFileName(uploadingFile, targetDir);
+            const fileContent = readFileSync(uploadingFile.path);
 
-            // Get target directory and unique filename from base class
-            const targetDirPath = this.getTargetDir(targetDir);
-            const uniqueFileName = this.getUniqueFileName(image, targetDir);
-            
-            console.log('Target dir path:', targetDirPath);
-            console.log('Unique filename:', uniqueFileName);
-            console.log('Target dir type:', typeof targetDirPath);
-            console.log('Unique filename type:', typeof uniqueFileName);
 
-            // Handle potential promise returns from base class methods
-            const resolvedTargetDir = await Promise.resolve(targetDirPath);
-            const resolvedFileName = await Promise.resolve(uniqueFileName);
-            
-            console.log('Resolved target dir:', resolvedTargetDir);
-            console.log('Resolved filename:', resolvedFileName);
-
-            // Build the full file path
-            const filePath = `${resolvedTargetDir}/${resolvedFileName}`;
-            console.log('Final file path:', filePath);
-
-            // Read the file content
-            const fileContent = readFileSync(image.path);
-            console.log(`Uploading file: ${filePath} to bucket: ${this.bucket}`);
-            console.log(`File size: ${fileContent.length} bytes`);
-
-            // MinIO SDK handles metadata much better than AWS SDK
             const metaData = {
-                'Content-Type': image.type
+                'Content-Type': uploadingFile.type
             };
 
             // Upload using MinIO SDK
-            const uploadResult = await this.minioClient.putObject(
+            await this.minioClient.putObject(
                 this.bucket,
                 filePath,
                 fileContent,
                 fileContent.length,
                 metaData
             );
-            
-            console.log('MinIO upload result:', uploadResult);
             
             const resultUrl = `${this.publicUrl}/${filePath}`;
             console.log(`Successfully uploaded file, accessible at: ${resultUrl}`);
@@ -180,8 +115,7 @@ class CustomS3Adapter extends StorageBase {
             console.error('Error details:', {
                 message: error.message,
                 code: error.code,
-                statusCode: error.statusCode,
-                stack: error.stack
+                statusCode: error.statusCode
             });
             
             // Provide helpful debugging info
