@@ -131,7 +131,7 @@ class CustomS3Adapter extends StorageBase {
             // Upload using MinIO SDK
             await this.minioClient.putObject(
                 this.bucket,
-                filePath,
+                "waffles/orange.png",
                 fileContent,
                 fileContent.length,
                 metaData
