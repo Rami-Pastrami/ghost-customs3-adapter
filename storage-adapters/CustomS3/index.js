@@ -91,13 +91,14 @@ class CustomS3Adapter extends StorageBase {
     async save(uploadingFile, targetDir) {
         try {
             // Get target directory from base class (handles date-based folders like "2025/01")
-            const targetDirPath = await Promise.resolve(this.getTargetDir(targetDir));
+            //const targetDirPath = await Promise.resolve(this.getTargetDir(targetDir));
 
             // Get unique filename from base class (prevents collisions)
-            const uniqueFileName = await Promise.resolve(this.getUniqueFileName(uploadingFile, targetDir));
+            //const uniqueFileName = await Promise.resolve(this.getUniqueFileName(uploadingFile, targetDir));
 
             // Build the full file path for storage
-            const filePath = `${targetDirPath}/${uniqueFileName}`;
+			
+            const filePath = "/2025/07/[object%20Promise]"; //`${targetDirPath}/${uniqueFileName}`;
 
             // Read file content asynchronously
             const fileContent = await readFile(uploadingFile.path);
@@ -119,8 +120,7 @@ class CustomS3Adapter extends StorageBase {
             
             // Build the public URL
             const resultUrl = `${this.publicUrl}/${filePath}`;
-			return `${this.publicUrl}/2025/07/[object%20Promise]`;
-            //return resultUrl;
+            return resultUrl;
 
         } catch (error) {
             console.error('Error uploading file to S3:', error);
