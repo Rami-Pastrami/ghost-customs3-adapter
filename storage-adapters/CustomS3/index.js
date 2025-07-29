@@ -90,42 +90,17 @@ class CustomS3Adapter extends StorageBase {
     }
 
     async save(file, targetDir) {
-        console.log('=== SAVE METHOD DEBUG (LocalStorageBase pattern) ===');
-        console.log('file:', {
-            name: file.name,
-            path: file.path,
-            type: file.type,
-            size: file.size
-        });
-        console.log('targetDir:', targetDir);
-
         try {
-            // Follow LocalStorageBase pattern exactly
             // NOTE: the base implementation of `getTargetDir` returns the format this.storagePath/YYYY/MM
             targetDir = targetDir || this.getTargetDir(this.storagePath);
-            console.log('resolved targetDir:', targetDir, typeof targetDir);
 
-            // getUniqueFileName is definitely async according to LocalStorageBase
             const filename = await this.getUniqueFileName(file, targetDir);
-            console.log('filename from getUniqueFileName:', filename, typeof filename);
-
-            // Build the full path for S3 storage
             const filePath = `${targetDir}/${path.basename(filename)}`;
-            console.log('Final filePath for S3:', filePath);
-
-            // Read file content asynchronously
             const fileContent = await readFile(file.path);
-            console.log(`File size: ${fileContent.length} bytes`);
-
-            // Metadata for the file
             const metaData = {
                 'Content-Type': file.type,
                 'Cache-Control': `max-age=${60 * 60 * 24 * 7}`, // 7 days
             };
-
-            console.log(`Uploading to MinIO: ${filePath}`);
-
-            // Upload using MinIO SDK
             await this.minioClient.putObject(
                 this.bucket,
                 filePath,
@@ -134,9 +109,7 @@ class CustomS3Adapter extends StorageBase {
                 metaData
             );
             
-            // Build the public URL - similar to LocalStorageBase fullUrl construction
             const fullUrl = `${this.publicUrl}/${filePath}`;
-            console.log(`Successfully uploaded file, accessible at: ${fullUrl}`);
             return fullUrl;
 
         } catch (error) {
@@ -173,11 +146,6 @@ class CustomS3Adapter extends StorageBase {
     }
 
     async exists(filename, targetDir) {
-        console.log('=== EXISTS METHOD DEBUG ===');
-        console.log('filename:', filename, typeof filename);
-        console.log('targetDir:', targetDir, typeof targetDir);
-        
-        // Defensive programming - handle undefined/null parameters
         if (!filename) {
             console.error('EXISTS ERROR: filename is undefined or null');
             return false;
@@ -185,43 +153,29 @@ class CustomS3Adapter extends StorageBase {
         
         const safeTargetDir = targetDir || '';
         const filePath = path.posix.join(safeTargetDir, filename);
-        console.log('exists filePath:', filePath);
-        
         try {
             await this.minioClient.statObject(this.bucket, filePath);
-            console.log(`File exists: ${filePath}`);
             return true;
         } catch (err) {
             if (err.code === 'NotFound' || err.code === 'NoSuchKey') {
-                console.log(`File does not exist: ${filePath}`);
                 return false;
             }
-            console.error('Error checking file existence:', err);
             throw err;
         }
     }
 
     async delete(filename, targetDir) {
-        console.log('=== DELETE METHOD DEBUG ===');
-        console.log('filename:', filename, typeof filename);
-        console.log('targetDir:', targetDir, typeof targetDir);
-        
-        // Defensive programming - handle undefined/null parameters
         if (!filename) {
-            console.error('DELETE ERROR: filename is undefined or null');
             throw new Error('Cannot delete file: filename is undefined');
         }
         
         try {
             const safeTargetDir = targetDir || '';
             const filePath = path.posix.join(safeTargetDir, filename);
-            console.log('delete filePath:', filePath);
             
             await this.minioClient.removeObject(this.bucket, filePath);
-            console.log(`Successfully deleted file: ${filePath}`);
             return true;
         } catch (error) {
-            console.error('Error deleting file from S3:', error);
             throw error;
         }
     }
@@ -231,17 +185,11 @@ class CustomS3Adapter extends StorageBase {
     }
 
     async read(options) {
-        console.log('=== READ METHOD DEBUG ===');
-        console.log('options:', options);
-        
-        // Defensive programming - handle undefined/null options
         if (!options || !options.path) {
-            console.error('READ ERROR: options.path is undefined or null');
             throw new Error('Cannot read file: options.path is undefined');
         }
         
         try {
-            console.log(`Reading file: ${options.path} from bucket: ${this.bucket}`);
             
             // MinIO SDK's getObject returns a readable stream
             const stream = await this.minioClient.getObject(this.bucket, options.path);
