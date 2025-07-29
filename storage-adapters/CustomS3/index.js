@@ -67,9 +67,6 @@ class CustomS3Adapter extends StorageBase {
             useSSL = true;
         }
 
-        // Detect if we're using MinIO or another non-AWS service
-        this.isAWS = endpointHost.includes('amazonaws.com');
-
         // Validate that all required configuration is present
         if (!this.bucket || !this.accessKeyId || !this.secretAccessKey || !this.publicUrl || !this.endpoint) {
             throw new Error(`Missing required S3 configuration. Please check your environment variables:
@@ -131,7 +128,7 @@ class CustomS3Adapter extends StorageBase {
             // Upload using MinIO SDK
             await this.minioClient.putObject(
                 this.bucket,
-                "waffles/orange.png",
+                filePath,
                 fileContent,
                 fileContent.length,
                 metaData
