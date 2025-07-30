@@ -8,7 +8,7 @@ class CustomS3Adapter extends StorageBase {
         super(config);
 
         // Add missing base class properties that LocalStorageBase uses
-        this.storagePath = 'content/images'; // Base path for organizing files
+        this.storagePath = 'content'; // Base path for organizing files
         this.staticFileURLPrefix = 'content/images'; // URL prefix for accessing files
         
         console.log('=== CustomS3Adapter constructor called ===');
