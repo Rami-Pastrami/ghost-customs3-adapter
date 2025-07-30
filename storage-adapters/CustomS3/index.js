@@ -241,6 +241,37 @@ class CustomS3Adapter extends StorageBase {
         return (req, res, next) => next();
     }
 
+    urlToPath(url) {
+        console.log('=== URL_TO_PATH METHOD CALLED ===');
+        console.log('Converting URL to path:', url);
+        
+        try {
+            // Remove the public URL prefix to get the relative path
+            if (url.startsWith(this.publicUrl)) {
+                const relativePath = url.replace(this.publicUrl + '/', '');
+                console.log('Converted to relative path:', relativePath);
+                return relativePath;
+            }
+            
+            // If URL doesn't match our public URL format, try to extract path
+            const urlObj = new URL(url);
+            const pathname = urlObj.pathname;
+            
+            // Remove leading slash and return
+            const cleanPath = pathname.startsWith('/') ? pathname.substring(1) : pathname;
+            console.log('Extracted path from URL:', cleanPath);
+            return cleanPath;
+            
+        } catch (error) {
+            console.error('Error converting URL to path:', error);
+            console.error('URL:', url);
+            console.error('Public URL:', this.publicUrl);
+            
+            // Fallback: return the URL as-is and let Ghost handle it
+            return url;
+        }
+    }
+
     async read(options) {
         if (!options || !options.path) {
             throw new Error('Cannot read file: options.path is undefined');
