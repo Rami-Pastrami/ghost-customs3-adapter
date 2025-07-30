@@ -93,37 +93,17 @@ class CustomS3Adapter extends StorageBase {
     }
 
     async save(file, targetDir) {
-        console.log('=== SAVE METHOD DEBUG ===');
-        console.log('file:', {
-            name: file.name,
-            path: file.path,
-            type: file.type,
-            size: file.size
-        });
-        console.log('targetDir:', targetDir);
-        
-        // Check if this is a video file
-        const isVideo = file.type && file.type.startsWith('video/');
-        console.log('Is video file:', isVideo);
-        console.log('File size (MB):', file.size ? (file.size / 1024 / 1024).toFixed(2) : 'unknown');
-
+       
         try {
             // NOTE: the base implementation of `getTargetDir` returns the format this.storagePath/YYYY/MM
             targetDir = targetDir || this.getTargetDir(this.storagePath);
-            console.log('resolved targetDir:', targetDir);
-
             const filename = await this.getUniqueFileName(file, targetDir);
-            console.log('filename:', filename);
-            
             const filePath = `${targetDir}/${path.basename(filename)}`;
-            console.log('Final filePath for S3:', filePath);
 
             // For large files (videos), use streaming instead of loading into memory
             if (file.size && file.size > 50 * 1024 * 1024) { // 50MB threshold
-                console.log('Large file detected, using streaming upload');
                 return await this.uploadLargeFile(file, filePath);
             } else {
-                console.log('Small file, using buffer upload');
                 const fileContent = await readFile(file.path);
                 const metaData = {
                     'Content-Type': file.type,
@@ -138,7 +118,6 @@ class CustomS3Adapter extends StorageBase {
                 );
                 
                 const fullUrl = `${this.publicUrl}/${filePath}`;
-                console.log(`Successfully uploaded small file: ${fullUrl}`);
                 return fullUrl;
             }
 
@@ -176,7 +155,6 @@ class CustomS3Adapter extends StorageBase {
     }
 
     async uploadLargeFile(file, filePath) {
-        console.log('Uploading large file via stream...');
         
         const fs = require('fs');
         const stats = await require('fs').promises.stat(file.path);
@@ -198,7 +176,6 @@ class CustomS3Adapter extends StorageBase {
         );
         
         const fullUrl = `${this.publicUrl}/${filePath}`;
-        console.log(`Successfully uploaded large file: ${fullUrl}`);
         return fullUrl;
     }
 
@@ -242,14 +219,10 @@ class CustomS3Adapter extends StorageBase {
     }
 
     urlToPath(url) {
-        console.log('=== URL_TO_PATH METHOD CALLED ===');
-        console.log('Converting URL to path:', url);
-        
         try {
             // Remove the public URL prefix to get the relative path
             if (url.startsWith(this.publicUrl)) {
                 const relativePath = url.replace(this.publicUrl + '/', '');
-                console.log('Converted to relative path:', relativePath);
                 return relativePath;
             }
             
@@ -259,7 +232,6 @@ class CustomS3Adapter extends StorageBase {
             
             // Remove leading slash and return
             const cleanPath = pathname.startsWith('/') ? pathname.substring(1) : pathname;
-            console.log('Extracted path from URL:', cleanPath);
             return cleanPath;
             
         } catch (error) {
