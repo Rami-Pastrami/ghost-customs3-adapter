@@ -10,6 +10,9 @@ class CustomS3Adapter extends StorageBase {
         // Add missing base class properties that LocalStorageBase uses
         this.storagePath = 'content/images'; // Base path for organizing files
         this.staticFileURLPrefix = 'content/images'; // URL prefix for accessing files
+        
+        console.log('=== CustomS3Adapter constructor called ===');
+        console.log('Storage adapter initialized for both images and videos');
 
         // Read configuration from environment variables
         // Expected formats and examples:
@@ -90,27 +93,54 @@ class CustomS3Adapter extends StorageBase {
     }
 
     async save(file, targetDir) {
+        console.log('=== SAVE METHOD DEBUG ===');
+        console.log('file:', {
+            name: file.name,
+            path: file.path,
+            type: file.type,
+            size: file.size
+        });
+        console.log('targetDir:', targetDir);
+        
+        // Check if this is a video file
+        const isVideo = file.type && file.type.startsWith('video/');
+        console.log('Is video file:', isVideo);
+        console.log('File size (MB):', file.size ? (file.size / 1024 / 1024).toFixed(2) : 'unknown');
+
         try {
             // NOTE: the base implementation of `getTargetDir` returns the format this.storagePath/YYYY/MM
             targetDir = targetDir || this.getTargetDir(this.storagePath);
+            console.log('resolved targetDir:', targetDir);
 
             const filename = await this.getUniqueFileName(file, targetDir);
-            const filePath = `${targetDir}/${path.basename(filename)}`;
-            const fileContent = await readFile(file.path);
-            const metaData = {
-                'Content-Type': file.type,
-                'Cache-Control': `max-age=${60 * 60 * 24 * 7}`, // 7 days
-            };
-            await this.minioClient.putObject(
-                this.bucket,
-                filePath,
-                fileContent,
-                fileContent.length,
-                metaData
-            );
+            console.log('filename:', filename);
             
-            const fullUrl = `${this.publicUrl}/${filePath}`;
-            return fullUrl;
+            const filePath = `${targetDir}/${path.basename(filename)}`;
+            console.log('Final filePath for S3:', filePath);
+
+            // For large files (videos), use streaming instead of loading into memory
+            if (file.size && file.size > 50 * 1024 * 1024) { // 50MB threshold
+                console.log('Large file detected, using streaming upload');
+                return await this.uploadLargeFile(file, filePath);
+            } else {
+                console.log('Small file, using buffer upload');
+                const fileContent = await readFile(file.path);
+                const metaData = {
+                    'Content-Type': file.type,
+                    'Cache-Control': `max-age=${60 * 60 * 24 * 7}`, // 7 days
+                };
+                await this.minioClient.putObject(
+                    this.bucket,
+                    filePath,
+                    fileContent,
+                    fileContent.length,
+                    metaData
+                );
+                
+                const fullUrl = `${this.publicUrl}/${filePath}`;
+                console.log(`Successfully uploaded small file: ${fullUrl}`);
+                return fullUrl;
+            }
 
         } catch (error) {
             console.error('Error uploading file to S3:', error);
@@ -143,6 +173,33 @@ class CustomS3Adapter extends StorageBase {
             
             throw error;
         }
+    }
+
+    async uploadLargeFile(file, filePath) {
+        console.log('Uploading large file via stream...');
+        
+        const fs = require('fs');
+        const stats = await require('fs').promises.stat(file.path);
+        const stream = fs.createReadStream(file.path);
+        
+        console.log(`File size: ${stats.size} bytes`);
+
+        const metaData = {
+            'Content-Type': file.type,
+            'Cache-Control': `max-age=${60 * 60 * 24 * 7}`, // 7 days
+        };
+
+        await this.minioClient.putObject(
+            this.bucket,
+            filePath,
+            stream,
+            stats.size,
+            metaData
+        );
+        
+        const fullUrl = `${this.publicUrl}/${filePath}`;
+        console.log(`Successfully uploaded large file: ${fullUrl}`);
+        return fullUrl;
     }
 
     async exists(filename, targetDir) {
