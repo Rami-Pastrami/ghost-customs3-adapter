@@ -9,6 +9,15 @@ jobs:
   build-and-push:
     runs-on: ubuntu-latest
     steps:
+
+      - name: Base requirements
+        run: |
+          # packages
+          apk update && apk add --no-cache git docker docker-compose nodejs gpg openssh npm ansible
+          # ansible collections
+          ansible-galaxy collection install community.general --force
+          ansible-galaxy collection install ansible.posix --force
+
       - name: Checkout code
         uses: actions/checkout@v3
 
