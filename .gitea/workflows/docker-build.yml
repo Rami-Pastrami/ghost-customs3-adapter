@@ -7,30 +7,23 @@ on:
 
 jobs:
   build-and-push:
-    runs-on: podman-rootless
+    runs-on: ubuntu-latest
     steps:
-
-      - name: Set docker alias
-        run: |
-          alias docker=podman
-          export PATH=$PATH
-
-      - name: Checkout code with git and token
-        run: |
-          git clone --branch main https://${{ secrets.BG_USER }}:${{ secrets.G_TOKEN }}@${{ secrets.BG_URL }}/${{ secrets.BG_USER }}/ghost-customs3-adapter.git .
+      - name: Checkout code
+        uses: actions/checkout@v3
 
       - name: Log in to Gitea Docker registry
         run: |
-          echo "${{ secrets.BG_PACKAGE_TOKEN }}" | podman login ${{ secrets.G_URL }} -u "${{ secrets.G_USER }}" --password-stdin
+          echo "${{ secrets.BG_PACKAGE_TOKEN }}" | docker login ${{ secrets.G_URL }} -u "${{ secrets.G_USER }}" --password-stdin
 
       - name: Log in to GitHub Container Registry
         run: |
-          echo "${{ secrets.GHCR_TOKEN }}" | podman login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
+          echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
 
       - name: Build image
         run: |
-          podman build -t ${{ secrets.G_URL }}/${{ secrets.G_USER }}/ghost-customs3-adapter:latest .
-          podman tag ${{ secrets.G_URL }}/${{ secrets.G_USER }}/ghost-customs3-adapter:latest ghcr.io/${{ secrets.GHCR_USERNAME }}/ghost-customs3-adapter:latest
+          docker build -t ${{ secrets.G_URL }}/${{ secrets.G_USER }}/ghost-customs3-adapter:latest .
+          docker tag ${{ secrets.G_URL }}/${{ secrets.G_USER }}/ghost-customs3-adapter:latest ghcr.io/${{ secrets.GHCR_USERNAME }}/ghost-customs3-adapter:latest
 
       - name: Push to Gitea
         run: |
