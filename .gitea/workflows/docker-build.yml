@@ -34,9 +34,9 @@ jobs:
           docker build -t ${{ secrets.G_URL }}/${{ secrets.G_USER }}/ghost-customs3-adapter:latest .
           docker tag ${{ secrets.G_URL }}/${{ secrets.G_USER }}/ghost-customs3-adapter:latest ghcr.io/${{ secrets.GHCR_USERNAME }}/ghost-customs3-adapter:latest
 
-      - name: Push to Gitea
-        run: |
-          docker push ${{ secrets.G_URL }}/${{ secrets.G_USER }}/ghost-customs3-adapter:latest
+      #- name: Push to Gitea
+      #  run: |
+      #    docker push ${{ secrets.G_URL }}/${{ secrets.G_USER }}/ghost-customs3-adapter:latest
 
       - name: Push to GitHub Container Registry
         run: |
