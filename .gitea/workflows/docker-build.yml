@@ -17,7 +17,7 @@ jobs:
 
       - name: Checkout code with git and token
         run: |
-          git clone --branch main https://${{ secrets.G_USER }}:${{ secrets.G_TOKEN }}@${{ secrets.BG_URL }}/${{ secrets.G_USER }}/ghost-customs3-adapter.git .
+          git clone --branch main https://${{ secrets.BG_USER }}:${{ secrets.G_TOKEN }}@${{ secrets.BG_URL }}/${{ secrets.BG_USER }}/ghost-customs3-adapter.git .
 
       - name: Log in to Gitea Docker registry
         run: |
