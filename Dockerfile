@@ -9,5 +9,5 @@ WORKDIR /var/lib/ghost/content/adapters/storage/CustomS3
 #RUN npm install --production
 RUN npm install --omit=dev
 
-# Return to Ghost working directory
+# Return to Ghost working directory 
 WORKDIR /var/lib/ghost
