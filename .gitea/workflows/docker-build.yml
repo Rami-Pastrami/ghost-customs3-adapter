@@ -21,7 +21,7 @@ jobs:
 
       - name: Log in to Gitea Docker registry
         run: |
-          echo "${{ secrets.G_TOKEN }}" | docker login ${{ secrets.G_URL }} -u "${{ secrets.G_USER }}" --password-stdin
+          echo "${{ secrets.BG_PACKAGE_TOKEN }}" | docker login ${{ secrets.G_URL }} -u "${{ secrets.G_USER }}" --password-stdin
 
       - name: Log in to GitHub Container Registry
         run: |
