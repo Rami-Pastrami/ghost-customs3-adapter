@@ -8,8 +8,9 @@ class CustomS3Adapter extends StorageBase {
         super(config);
 
         // Add missing base class properties that LocalStorageBase uses
-        this.storagePath = 'content'; // Base path for organizing files
-        this.staticFileURLPrefix = 'content'; // URL prefix for accessing files
+        // NOTE: not needed anymore for ghost 6
+        //this.storagePath = 'content'; // Base path for organizing files
+        //this.staticFileURLPrefix = 'content'; // URL prefix for accessing files
 
         // Read configuration from environment variables
         // Expected formats and examples:
@@ -68,7 +69,8 @@ class CustomS3Adapter extends StorageBase {
         }
 
         // Validate that all required configuration is present
-        if (!this.bucket || !this.accessKeyId || !this.secretAccessKey || !this.publicUrl || !this.endpoint) {
+        //if (!this.bucket || !this.accessKeyId || !this.secretAccessKey || !this.publicUrl || !this.endpoint) {
+        if (!this.bucket || !this.accessKeyId || !this.secretAccessKey || !this.publicUrl) {
             throw new Error(`Missing required S3 configuration. Please check your environment variables:
                 S3_BUCKET: ${this.bucket ? 'SET' : 'MISSING'}
                 S3_REGION: ${this.region}
@@ -93,9 +95,23 @@ class CustomS3Adapter extends StorageBase {
        
         try {
             // NOTE: the base implementation of `getTargetDir` returns the format this.storagePath/YYYY/MM
-            targetDir = targetDir || this.getTargetDir(this.storagePath);
+            //targetDir = targetDir || this.getTargetDir(this.storagePath);
+            targetDir = targetDir || this.getTargetDir();
+
+            if (targetDir.startsWith('/')) {
+                targetDir = targetDir.slice(1);
+            }
+
             const filename = await this.getUniqueFileName(file, targetDir);
-            const filePath = `${targetDir}/${path.basename(filename)}`;
+
+            const filePath = path.posix.join(
+                targetDir,
+                path.basename(filename)
+            );
+
+            const contentType =
+                file.type || file.mimetype || 'application/octet-stream';
+
 
             // For large files (videos), use streaming instead of loading into memory
             if (file.size && file.size > 50 * 1024 * 1024) { // 50MB threshold
@@ -182,8 +198,7 @@ class CustomS3Adapter extends StorageBase {
             return false;
         }
         
-        const safeTargetDir = targetDir || '';
-        const filePath = path.posix.join(safeTargetDir, filename);
+        const filePath = path.posix.join(targetDir, filename);
         try {
             await this.minioClient.statObject(this.bucket, filePath);
             return true;
@@ -201,8 +216,9 @@ class CustomS3Adapter extends StorageBase {
         }
         
         try {
-            const safeTargetDir = targetDir || '';
-            const filePath = path.posix.join(safeTargetDir, filename);
+            //const safeTargetDir = targetDir || '';
+            //const filePath = path.posix.join(safeTargetDir, filename);
+            const filePath = path.posix.join(targetDir, filename);
             
             await this.minioClient.removeObject(this.bucket, filePath);
             return true;
@@ -211,6 +227,7 @@ class CustomS3Adapter extends StorageBase {
         }
     }
 
+    // Not really used in s#, but keeping for documentation reasons
     serve() {
         return (req, res, next) => next();
     }
