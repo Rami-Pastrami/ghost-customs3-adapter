@@ -15,8 +15,9 @@ jobs:
           alias docker=podman
           export PATH=$PATH
 
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - name: Checkout code with git and token
+        run: |
+          git clone --branch main ${{ secrets.G_URL }}/${{ secrets.G_USER }}/ghost-customs3-adapter.git .
 
       - name: Log in to Gitea Docker registry
         run: |
