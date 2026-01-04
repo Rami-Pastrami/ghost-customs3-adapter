@@ -21,11 +21,11 @@ jobs:
 
       - name: Log in to Gitea Docker registry
         run: |
-          echo "${{ secrets.BG_PACKAGE_TOKEN }}" | docker login ${{ secrets.G_URL }} -u "${{ secrets.G_USER }}" --password-stdin
+          echo "${{ secrets.BG_PACKAGE_TOKEN }}" | podman login ${{ secrets.G_URL }} -u "${{ secrets.G_USER }}" --password-stdin
 
       - name: Log in to GitHub Container Registry
         run: |
-          echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
+          echo "${{ secrets.GHCR_TOKEN }}" | podman login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
 
       - name: Build image
         run: |
